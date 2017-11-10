@@ -1,0 +1,81 @@
+
+import praw
+import numpy as np
+import matplotlib.pyplot as plt
+import nltk
+import pylab
+from scipy import stats
+from nltk.stem.porter import PorterStemmer
+from itertools import groupby
+import sys
+import os
+
+# take from: http://swizec.com/blog/measuring-vocabulary-richness-with-python/swizec/2528
+def words(entry):
+    return filter(lambda w: len(w) > 0,
+                  [w.strip("0123456789!:,.?(){}[]") for w in entry.split()])
+# take from: http://swizec.com/blog/measuring-vocabulary-richness-with-python/swizec/2528 
+def yule(entry):
+    d = {}
+    stemmer = PorterStemmer()
+    for w in words(entry):
+        w = stemmer.stem(w).lower()
+        try:
+            d[w] += 1
+        except KeyError:
+            d[w] = 1
+ 
+    M1 = float(len(d))
+    M2 = sum([len(list(g))*(freq**2) for freq,g in groupby(sorted(d.values()))])
+ 
+    try:
+        return (M1*M1)/(M2-M1)
+    except ZeroDivisionError:
+        return 0
+
+slopelist= []
+
+while True:
+    person = input('Enter code: ')
+    reddit = praw.Reddit(client_id='xxxxxx',
+                         client_secret='xxxxxxxxx',
+                         user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_4) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.1 Safari/603.1.30',)
+   
+    ltime =[]
+    lyulei = []
+    submission = reddit.submission(id=person)
+    submission.comment_sort = 'old'
+    submission.comments.replace_more(limit=0)
+    for comment in submission.comments.list():
+    
+        sentences = nltk.tokenize.sent_tokenize(comment.body)
+        time = comment.created
+        ltime.append(comment.created_utc)
+        text= str(comment.body)
+        gettingyules = yule(text)
+        lyulei.append(gettingyules)
+ 
+    atime = np.asarray(ltime)
+    ay = np.asarray(lyulei)
+    
+    x = (atime)/86400
+    y = (ay)
+    finiteYmask = np.isfinite(y)
+    yclean = y[finiteYmask]
+    xclean = x[finiteYmask]
+    x = xclean
+    y = yclean
+    slope, intercept, r_value, p_value, std_err = stats.linregress(x,y)
+    print ("slope",slope)
+    slopelist.append(slope)
+    saver=(person + ".png")
+    predict_y = intercept + slope * x
+    pylab.plot(x, y, 'o')
+    pylab.plot(x, predict_y, 'k-')
+    pylab.xlabel("Time in Days")
+    pylab.ylabel("Yule's I")
+    plt.savefig(saver)
+    plt.clf()
+
+    continue
+
